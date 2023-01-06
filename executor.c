@@ -60,8 +60,15 @@ read_data read_data_init(char* buff, pthread_mutex_t mutex, int fd) {
 }
 
 void push_queue(char* element) {
+    // printf("dodaje do kolejki: %s", element);
     for (int i = 0; i < strlen(element); i++) {
         msgQueue[queueSize++] = element[i];
+    }
+}
+
+void printf_queue() {
+    for (int i = 0; i < queueSize; i++) {
+        printf("%c", msgQueue[i]);
     }
 }
 
@@ -72,7 +79,7 @@ void* read_output(void* data) {
 
     while (read_line(tmp, MAX_INSTRUCTION_LENGTH, rd_file)) {
         ASSERT_SYS_OK(pthread_mutex_lock(&rd_data->mutex));
-        tmp[strlen(tmp) - 1] = '\0';
+        // tmp[strlen(tmp) - 1] = '\0';
         strcpy(rd_data->buff, tmp);
         ASSERT_SYS_OK(pthread_mutex_unlock(&rd_data->mutex));
     }
@@ -90,11 +97,10 @@ void* start_task(void* data) {
     pid_t pid;
     ASSERT_SYS_OK(pid = fork());
     if (!pid) {
-        // ta szmata co puszcza program tylko
         ASSERT_SYS_OK(close(outDsc[0]));
         ASSERT_SYS_OK(close(errDsc[0]));
 
-        printf("Task %d started: pid %d.\n", myTask->id, getpid());
+        // printf("Task %d started: pid %d.\n", myTask->id, getpid());
 
         ASSERT_SYS_OK(dup2(outDsc[1], STDOUT_FILENO));
         ASSERT_SYS_OK(dup2(errDsc[1], STDERR_FILENO));
@@ -102,13 +108,10 @@ void* start_task(void* data) {
         ASSERT_SYS_OK(close(outDsc[1]));
         ASSERT_SYS_OK(close(errDsc[1]));
         
-        // teraz wypisuje output do ojca pewniaczek
-    
-        // printf("%d\n", strcmp("./chuj\0", myTask->argv[0]));
-        // printf("%c %d\n", myTask->argv[0][6], myTask->argv[0][6]);
         ASSERT_SYS_OK(execvp(myTask->argv[0], myTask->argv));
     } else {
         myTask->pid = pid;
+        printf("Task %d started: pid %d.\n", myTask->id, pid);
         ASSERT_SYS_OK(close(outDsc[1]));
         ASSERT_SYS_OK(close(errDsc[1]));
 
@@ -125,7 +128,7 @@ void* start_task(void* data) {
         char msg[ENDING_MSG_SIZE];
         waitpid(pid, &status, 0);
         if (WIFEXITED(status)) {
-            sprintf(msg, "Task %d ended: status %d.\n", myTask->id, status);
+            sprintf(msg, "Task %d ended: status %d.\n", myTask->id, WEXITSTATUS(status));
         } else {
             sprintf(msg, "Task %d ended: signalled.\n", myTask->id);
         }
@@ -149,62 +152,52 @@ int main(void) {
     ASSERT_SYS_OK(sem_init(&ended_handling, 1, 0));
     char line[MAX_INSTRUCTION_LENGTH];
     int tasksCount = 0;
-    while (read_line(line, MAX_INSTRUCTION_LENGTH, stdin) && line[0] != 'q') {
+    while (read_line(line, MAX_INSTRUCTION_LENGTH, stdin)) {
         // line[strlen(line) - 1] = '\0';
-        // char cep[2] = {10, '\0'};
-        // strtok(line, cep);
         ASSERT_ZERO(pthread_mutex_lock(&mutex));
         isHandling = true;
         ASSERT_ZERO(pthread_mutex_unlock(&mutex));
-        if (line[0] == 'r') {
-            
-            // char *argv[MAX_INSTRUCTION_LENGTH];
-            // split_string(line, argv);
-            char **argv = split_string2(line);
-
-            // char* arfv[MAX_INSTRUCTION_LENGTH];
-            // split_string2(line, argv);
-
-            tasks[tasksCount] = task_init(&(argv[1]), tasksCount);
-            // printf("%c %d\n", argv[2][0], argv[2][0]);
+        char **args = split_string(line);
+        if (!strcmp(args[0], "run")) {
+            tasks[tasksCount] = task_init(&(args[1]), tasksCount);
             ASSERT_SYS_OK(pthread_create(&(tasks[tasksCount].thread), NULL, start_task, &(tasks[tasksCount])));
             tasksCount++;
             ASSERT_SYS_OK(sem_wait(&ended_handling));
         }
-        else if (line[0] == 'o') {
-            char *split_line[MAX_INSTRUCTION_LENGTH];
-            split_string(line, split_line);
-            int task_number = split_line[1][0] - '0';
-            pthread_mutex_lock(&tasks[task_number].outSemaphore);
-            printf("Task %d stdout: '%s'.\n", task_number, tasks[task_number].out);
-            pthread_mutex_unlock(&tasks[task_number].outSemaphore);
+        else if (!strcmp(args[0], "quit")) {
+            isHandling = false;
+            break;
         }
-        else if (line[0] == 'e') {
-            char *split_line[MAX_INSTRUCTION_LENGTH]; 
-            split_string(line, split_line);
-            int task_number = split_line[1][0] - '0';
-            pthread_mutex_lock(&tasks[task_number].errSemaphore);
-            // printf("%c", tasks[task_number].err[0]);
-            printf("Task %d stderr: '%s'.\n", task_number, tasks[task_number].err);
-            pthread_mutex_unlock(&tasks[task_number].errSemaphore);
-        }
-        else if (line[0] == 'k') {
-            char *split_line[MAX_INSTRUCTION_LENGTH]; 
-            split_string(line, split_line);
-            int task_number = split_line[1][0] - '0';
-            printf("%d\n", tasks[task_number].pid);
-            kill(tasks[task_number].pid, SIGINT);
-        }
-        else if (line[0] == 's') {
-            char **argv = split_string2(line);
-            int length = atoi(argv[1]);
-            usleep(1000 * length);
+        else {
+            int inputNumber = atoi(args[1]);
+            if (!strcmp(args[0], "out")) {
+                pthread_mutex_lock(&tasks[inputNumber].outSemaphore);
+                // printf_string(tasks[inputNumber].out);
+                printf("Task %d stdout: '%s'.\n", inputNumber, tasks[inputNumber].out);
+                pthread_mutex_unlock(&tasks[inputNumber].outSemaphore);
+            }
+            else if (!strcmp(args[0], "err")) {
+                pthread_mutex_lock(&tasks[inputNumber].errSemaphore);
+                printf("Task %d stderr: '%s'.\n", inputNumber, tasks[inputNumber].err);
+                pthread_mutex_unlock(&tasks[inputNumber].errSemaphore);
+            }
+            else if (!strcmp(args[0], "kill")) {
+                kill(tasks[inputNumber].pid, SIGINT);
+            }
+            else if (!strcmp(args[0], "sleep")) {
+                usleep(1000 * inputNumber);
+            }
+            free_split_string(args);
         }
         ASSERT_ZERO(pthread_mutex_lock(&mutex));
         isHandling = false;
-        if(queueSize > 0) printf(msgQueue);
+        if(queueSize > 0) printf_queue(msgQueue);
         queueSize = 0;
         ASSERT_ZERO(pthread_mutex_unlock(&mutex));
+    }
+
+    for (int i = 0; i < tasksCount; i++) {
+        kill(tasks[i].pid, SIGINT);
     }
 
     for (int i = 0; i < tasksCount; i++) {

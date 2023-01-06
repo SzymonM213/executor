@@ -23,9 +23,7 @@ void set_close_on_exec(int file_descriptor, bool value);
  * In particular, for an empty string, the result is {"", NULL}.
  * An initial or final space, or two consecutive spaces, result in an empty-string part.
  */
-void split_string(char* s, char** split);
-
-char** split_string2(const char* s);
+char** split_string(const char* s);
 
 void free_split_string(char** parts);
 

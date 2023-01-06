@@ -50,7 +50,7 @@ void set_close_on_exec(int file_descriptor, bool value)
 //     return parts;
 // }
 
-char** split_string2(const char* s) {
+char** split_string(const char* s) {
     size_t len = strlen(s);
     int spaces = 0;
     for (int i = 0; i < len; ++i)
@@ -70,21 +70,30 @@ char** split_string2(const char* s) {
     return parts;
 }
 
-void split_string(char* s, char** split)
-{
-    int i = 0;
-    char sep[3] = {' ', (char) 10, '\0'};
-    split[i] = strtok(s, sep);
-    while (split[i++] != NULL) {
-        split[i] = strtok(NULL, sep);
-    }
-}
+// void split_string(char* s, char** split)
+// {
+//     int i = 0;
+//     char sep[3] = {' ', (char) 10, '\0'};
+//     split[i] = strtok(s, sep);
+//     while (split[i++] != NULL) {
+//         split[i] = strtok(NULL, sep);
+//     }
+// }
 
 void free_split_string(char** parts)
 {
     for (int i = 0; parts[i] != NULL; ++i)
         free(parts[i]);
     free(parts);
+}
+
+//TODO: wyjebać to
+void printf_string(char* s) {
+    printf("length: %ld\n", strlen(s));
+    for (int i = 0; i <= strlen(s); i++) {
+        printf("%d %c\n", s[i], s[i]);
+    }
+    printf("<=======>\n");
 }
 
 bool read_line(char* buffer, size_t size_of_buffer, FILE* file)
@@ -120,6 +129,7 @@ bool read_line(char* buffer, size_t size_of_buffer, FILE* file)
         fatal("Line too long: %d > %d.", len, size_of_buffer - 1);
     memcpy(buffer, line, len + 1);
 
+    // printf_string(buffer);
     buffer[strlen(buffer) - 1] = '\0';
 
     free(line);
