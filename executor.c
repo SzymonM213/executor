@@ -19,31 +19,31 @@ char msgQueue[ENDING_MSG_SIZE * MAX_N_TASKS];
 int queueSize = 0;
 bool isHandling = false;
 pthread_mutex_t mutex;
-sem_t ended_handling;
+sem_t endedHandling;
 
 typedef struct task {
     char **argv;
-    char out[MAX_OUTPUT_LENGTH];
-    char err[MAX_OUTPUT_LENGTH];
-    pthread_mutex_t outSemaphore;
-    pthread_mutex_t errSemaphore;
+    char out[MAX_OUTPUT_LENGTH]; // buffer to save last stdout line
+    char err[MAX_OUTPUT_LENGTH]; // buffer to save last stderr line
+    pthread_mutex_t outMtx;
+    pthread_mutex_t errMtx;
     pid_t pid;
-    pthread_t thread;
     int id;
+    pthread_t thread;
 } task;
 
 task tasks[MAX_N_TASKS];
 
 typedef struct read_data {
     char *buff;
-    pthread_mutex_t *mutex_ptr;
+    pthread_mutex_t *buffMtxPtr;
     int fd;
 } read_data;
 
 task task_init(char **argv, int id) {
     task result;
-    ASSERT_ZERO(pthread_mutex_init(&result.outSemaphore, NULL));
-    ASSERT_ZERO(pthread_mutex_init(&result.errSemaphore, NULL));
+    ASSERT_ZERO(pthread_mutex_init(&result.outMtx, NULL));
+    ASSERT_ZERO(pthread_mutex_init(&result.errMtx, NULL));
     result.argv = argv;
     result.id = id;
     result.err[0] = '\0';
@@ -51,10 +51,10 @@ task task_init(char **argv, int id) {
     return result;
 }
 
-read_data read_data_init(char* buff, pthread_mutex_t *mutex_ptr, int fd) {
+read_data read_data_init(char* buff, pthread_mutex_t *buffMtxPtr, int fd) {
     read_data result;
     result.buff = buff;
-    result.mutex_ptr = mutex_ptr;
+    result.buffMtxPtr = buffMtxPtr;
     result.fd = fd;
     return result;
 }
@@ -77,9 +77,9 @@ void* read_output(void* data) {
     FILE *rd_file = fdopen(rd_data->fd, "r");
 
     while (read_line(tmp, MAX_INSTRUCTION_LENGTH, rd_file)) {
-        ASSERT_ZERO(pthread_mutex_lock(rd_data->mutex_ptr));
+        ASSERT_ZERO(pthread_mutex_lock(rd_data->buffMtxPtr));
         strcpy(rd_data->buff, tmp);
-        ASSERT_ZERO(pthread_mutex_unlock(rd_data->mutex_ptr));
+        ASSERT_ZERO(pthread_mutex_unlock(rd_data->buffMtxPtr));
     }
     fclose(rd_file);
 
@@ -111,14 +111,14 @@ void* start_task(void* data) {
         ASSERT_SYS_OK(close(outDsc[1]));
         ASSERT_SYS_OK(close(errDsc[1]));
 
-        read_data rdOut = read_data_init(myTask->out, &myTask->outSemaphore, outDsc[0]);
-        read_data rdErr = read_data_init(myTask->err, &myTask->errSemaphore, errDsc[0]);
+        read_data rdOut = read_data_init(myTask->out, &myTask->outMtx, outDsc[0]);
+        read_data rdErr = read_data_init(myTask->err, &myTask->errMtx, errDsc[0]);
 
-        pthread_t output_handlers[2];
-        ASSERT_SYS_OK(pthread_create(&output_handlers[0], NULL, read_output, &rdOut));
-        ASSERT_SYS_OK(pthread_create(&output_handlers[1], NULL, read_output, &rdErr));
+        pthread_t outReaders[2];
+        ASSERT_SYS_OK(pthread_create(&outReaders[0], NULL, read_output, &rdOut));
+        ASSERT_SYS_OK(pthread_create(&outReaders[1], NULL, read_output, &rdErr));
 
-        ASSERT_SYS_OK(sem_post(&ended_handling));
+        ASSERT_SYS_OK(sem_post(&endedHandling));
 
         int status;
         char msg[ENDING_MSG_SIZE];
@@ -136,8 +136,8 @@ void* start_task(void* data) {
         }
         ASSERT_ZERO(pthread_mutex_unlock(&mutex));
         free_split_string(myTask->argv - 1);
-        pthread_join(output_handlers[0], NULL);
-        pthread_join(output_handlers[1], NULL);
+        pthread_join(outReaders[0], NULL);
+        pthread_join(outReaders[1], NULL);
     }
 
     return 0;
@@ -145,7 +145,7 @@ void* start_task(void* data) {
 
 int main(void) {
     ASSERT_ZERO(pthread_mutex_init(&mutex, NULL));
-    ASSERT_SYS_OK(sem_init(&ended_handling, 0, 0));
+    ASSERT_SYS_OK(sem_init(&endedHandling, 0, 0));
     char line[MAX_INSTRUCTION_LENGTH];
     int tasksCount = 0;
     while (read_line(line, MAX_INSTRUCTION_LENGTH, stdin) && line[0] != 'q') {
@@ -157,21 +157,21 @@ int main(void) {
             tasks[tasksCount] = task_init(&(args[1]), tasksCount);
             ASSERT_SYS_OK(pthread_create(&(tasks[tasksCount].thread), NULL, start_task, &(tasks[tasksCount])));
             tasksCount++;
-            ASSERT_SYS_OK(sem_wait(&ended_handling));
+            ASSERT_SYS_OK(sem_wait(&endedHandling));
         } else {
             if (!strcmp(args[0], "out")) {
-                int taskNumber = atoi(args[1]);
-                ASSERT_ZERO(pthread_mutex_lock(&tasks[taskNumber].outSemaphore));
-                printf("Task %d stdout: '%s'.\n", taskNumber, tasks[taskNumber].out);
-                ASSERT_ZERO(pthread_mutex_unlock(&tasks[taskNumber].outSemaphore));
+                int taskNum = atoi(args[1]);
+                ASSERT_ZERO(pthread_mutex_lock(&tasks[taskNum].outMtx));
+                printf("Task %d stdout: '%s'.\n", taskNum, tasks[taskNum].out);
+                ASSERT_ZERO(pthread_mutex_unlock(&tasks[taskNum].outMtx));
             } else if (!strcmp(args[0], "err")) {
-                int taskNumber = atoi(args[1]);
-                pthread_mutex_lock(&tasks[taskNumber].errSemaphore);
-                printf("Task %d stderr: '%s'.\n", taskNumber, tasks[taskNumber].err);
-                pthread_mutex_unlock(&tasks[taskNumber].errSemaphore);
+                int taskNum = atoi(args[1]);
+                pthread_mutex_lock(&tasks[taskNum].errMtx);
+                printf("Task %d stderr: '%s'.\n", taskNum, tasks[taskNum].err);
+                pthread_mutex_unlock(&tasks[taskNum].errMtx);
             } else if (!strcmp(args[0], "kill")) {
-                int taskNumber = atoi(args[1]);
-                kill(tasks[taskNumber].pid, SIGINT);
+                int taskNum = atoi(args[1]);
+                kill(tasks[taskNum].pid, SIGINT);
             } else if (!strcmp(args[0], "sleep")) {
                 int milliseconds = atoi(args[1]);
                 usleep(1000 * milliseconds);
@@ -191,7 +191,9 @@ int main(void) {
 
     for (int i = 0; i < tasksCount; i++) {
         pthread_join(tasks[i].thread, NULL);
+        ASSERT_ZERO(pthread_mutex_destroy(&tasks[i].errMtx));
+        ASSERT_ZERO(pthread_mutex_destroy(&tasks[i].outMtx));
     }
     ASSERT_ZERO(pthread_mutex_destroy(&mutex));
-    ASSERT_SYS_OK(sem_destroy(&ended_handling));
+    ASSERT_SYS_OK(sem_destroy(&endedHandling));
 }

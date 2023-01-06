@@ -27,29 +27,6 @@ void set_close_on_exec(int file_descriptor, bool value)
     ASSERT_SYS_OK(fcntl(file_descriptor, F_SETFD, flags));
 }
 
-// char** split_string2(const char* s)
-// {
-//     size_t len = strlen(s);
-//     int spaces = 0;
-//     for (int i = 0; i < len; ++i)
-//         if (s[i] == ' ') {
-//             spaces++;
-//         }
-//     char** parts = calloc(spaces + 2, sizeof(char*));
-//     int p = 0;
-//     int b = 0;
-//     for (int i = 0; i < len; ++i) {
-//         if (s[i] == ' ' || s[i] == (char) 10) {
-//             parts[p++] = strndup(s + b, i - b);
-//             b = i + 1;
-//         }
-//     }
-//     parts[p++] = strndup(s + b, len - b);
-//     parts[spaces + 1] = NULL;
-//     // assert(p == spaces + 1);
-//     return parts;
-// }
-
 char** split_string(const char* s) {
     size_t len = strlen(s);
     int spaces = 0;
@@ -70,30 +47,11 @@ char** split_string(const char* s) {
     return parts;
 }
 
-// void split_string(char* s, char** split)
-// {
-//     int i = 0;
-//     char sep[3] = {' ', (char) 10, '\0'};
-//     split[i] = strtok(s, sep);
-//     while (split[i++] != NULL) {
-//         split[i] = strtok(NULL, sep);
-//     }
-// }
-
 void free_split_string(char** parts)
 {
     for (int i = 0; parts[i] != NULL; ++i)
         free(parts[i]);
     free(parts);
-}
-
-//TODO: wyjebać to
-void printf_string(char* s) {
-    printf("length: %ld\n", strlen(s));
-    for (int i = 0; i <= strlen(s); i++) {
-        printf("%d %c\n", s[i], s[i]);
-    }
-    printf("<=======>\n");
 }
 
 bool read_line(char* buffer, size_t size_of_buffer, FILE* file)

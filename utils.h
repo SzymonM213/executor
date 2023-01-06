@@ -16,7 +16,8 @@ void set_close_on_exec(int file_descriptor, bool value);
 /*
  * Split a string into space-delimited parts.
  *
- * split is an array of null-terminated strings, ending with NULL.
+ * The result is an array of null-terminated strings, ending with NULL.
+ * It must be freed with free_split_string()
  *
  * The resulting parts don't contain any spaces.
  * The result has always as many parts as they are spaces, plus 1.
