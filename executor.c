@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <semaphore.h>
 
 #include "utils.h"
 #include "err.h"
@@ -13,13 +14,12 @@
 #define MAX_OUTPUT_LENGTH 1022
 #define MAX_N_TASKS 4096
 #define ENDING_MSG_SIZE 50
-#define DEBUG false
 
 char msgQueue[ENDING_MSG_SIZE * MAX_N_TASKS];
 int queueSize = 0;
 bool isHandling = false;
-// pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex;
+sem_t ended_handling;
 
 typedef struct task {
     char **argv;
@@ -71,11 +71,9 @@ void* read_output(void* data) {
     FILE *rd_file = fdopen(rd_data->fd, "r");
 
     while (read_line(tmp, MAX_INSTRUCTION_LENGTH, rd_file)) {
-    // while (fgets(tmp, MAX_INSTRUCTION_LENGTH, rd_file) != NULL) {
         ASSERT_SYS_OK(pthread_mutex_lock(&rd_data->mutex));
         tmp[strlen(tmp) - 1] = '\0';
         strcpy(rd_data->buff, tmp);
-        if(DEBUG) printf("%s\n", rd_data->buff);
         ASSERT_SYS_OK(pthread_mutex_unlock(&rd_data->mutex));
     }
     fclose(rd_file);
@@ -121,6 +119,8 @@ void* start_task(void* data) {
         ASSERT_SYS_OK(pthread_create(&output_handlers[0], NULL, read_output, &rdOut));
         ASSERT_SYS_OK(pthread_create(&output_handlers[1], NULL, read_output, &rdErr));
 
+        ASSERT_SYS_OK(sem_post(&ended_handling));
+
         int status;
         char msg[ENDING_MSG_SIZE];
         waitpid(pid, &status, 0);
@@ -129,10 +129,6 @@ void* start_task(void* data) {
         } else {
             sprintf(msg, "Task %d ended: signalled.\n", myTask->id);
         }
-        int chuj;
-        // pthread_mutex_getprioceiling(&mutex, &chuj);
-        // printf("mutex: %d\n", pthread_mutex_trylock(&mutex));
-        // printf("kto czeka: %d\n", chuj);
         ASSERT_ZERO(pthread_mutex_lock(&mutex)); 
         if (isHandling) {
             push_queue(msg);
@@ -150,10 +146,11 @@ void* start_task(void* data) {
 
 int main(void) {
     ASSERT_ZERO(pthread_mutex_init(&mutex, NULL));
+    ASSERT_SYS_OK(sem_init(&ended_handling, 1, 0));
     char line[MAX_INSTRUCTION_LENGTH];
     int tasksCount = 0;
     while (read_line(line, MAX_INSTRUCTION_LENGTH, stdin) && line[0] != 'q') {
-        line[strlen(line) - 1] = '\0';
+        // line[strlen(line) - 1] = '\0';
         // char cep[2] = {10, '\0'};
         // strtok(line, cep);
         ASSERT_ZERO(pthread_mutex_lock(&mutex));
@@ -172,6 +169,7 @@ int main(void) {
             // printf("%c %d\n", argv[2][0], argv[2][0]);
             ASSERT_SYS_OK(pthread_create(&(tasks[tasksCount].thread), NULL, start_task, &(tasks[tasksCount])));
             tasksCount++;
+            ASSERT_SYS_OK(sem_wait(&ended_handling));
         }
         else if (line[0] == 'o') {
             char *split_line[MAX_INSTRUCTION_LENGTH];
@@ -200,7 +198,7 @@ int main(void) {
         else if (line[0] == 's') {
             char **argv = split_string2(line);
             int length = atoi(argv[1]);
-            usleep(10 * length);
+            usleep(1000 * length);
         }
         ASSERT_ZERO(pthread_mutex_lock(&mutex));
         isHandling = false;
@@ -213,4 +211,5 @@ int main(void) {
         pthread_join(tasks[i].thread, NULL);
     }
     ASSERT_ZERO(pthread_mutex_destroy(&mutex));
+    ASSERT_SYS_OK(sem_destroy(&ended_handling));
 }
