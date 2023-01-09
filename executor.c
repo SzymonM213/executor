@@ -76,7 +76,6 @@ void* read_output(void* data) {
     read_data* rd_data = data;
     char tmp[MAX_INSTRUCTION_LENGTH];
     FILE *rd_file = fdopen(rd_data->fd, "r");
-
     while (read_line(tmp, MAX_INSTRUCTION_LENGTH, rd_file)) {
         ASSERT_ZERO(pthread_mutex_lock(rd_data->buffMtxPtr));
         strcpy(rd_data->buff, tmp);
@@ -175,7 +174,7 @@ int main(void) {
                 ASSERT_ZERO(pthread_mutex_unlock(&tasks[taskNum].errMtx));
             } else if (!strcmp(args[0], "kill")) {
                 int taskNum = atoi(args[1]);
-                ASSERT_SYS_OK(kill(tasks[taskNum].pid, SIGINT));
+                kill(tasks[taskNum].pid, SIGINT);
             } else if (!strcmp(args[0], "sleep")) {
                 int milliseconds = atoi(args[1]);
                 ASSERT_ZERO(usleep(1000 * milliseconds));
@@ -189,7 +188,7 @@ int main(void) {
         ASSERT_ZERO(pthread_mutex_unlock(&mutex));
     }
     for (int i = 0; i < tasksCount; i++) {
-        ASSERT_SYS_OK(kill(tasks[i].pid, SIGKILL));
+        kill(tasks[i].pid, SIGKILL);
     }
     for (int i = 0; i < tasksCount; i++) {
         ASSERT_ZERO(pthread_join(tasks[i].thread, NULL));
@@ -198,4 +197,6 @@ int main(void) {
     }
     ASSERT_ZERO(pthread_mutex_destroy(&mutex));
     ASSERT_SYS_OK(sem_destroy(&endedHandling));
+
+    return 0;
 }

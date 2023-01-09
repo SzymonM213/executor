@@ -102,7 +102,6 @@ bool read_line(char* buffer, size_t size_of_buffer, FILE* file)
         fatal("Line too long: %d > %d.", len, size_of_buffer - 1);
     memcpy(buffer, line, len + 1);
 
-    // printf_string(buffer);
     if (buffer[strlen(buffer) - 1] == '\n') {
         buffer[strlen(buffer) - 1] = '\0';
     }
