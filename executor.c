@@ -9,8 +9,9 @@
 
 #include "utils.h"
 #include "err.h"
+#include "safe_printf.h"
 
-#define MAX_INSTRUCTION_LENGTH 511
+#define MAX_INSTRUCTION_LENGTH 512
 #define MAX_OUTPUT_LENGTH 1022
 #define MAX_N_TASKS 4096
 #define ENDING_MSG_SIZE 60
@@ -67,7 +68,7 @@ void push_queue(char* element) {
 
 void printf_queue() {
     for (int i = 0; i < queueSize; i++) {
-        printf("%c", msgQueue[i]);
+        safe_printf("%c", msgQueue[i]);
     }
 }
 
@@ -92,6 +93,10 @@ void* start_task(void* data) {
     int errDsc[2];
     ASSERT_SYS_OK(pipe(outDsc));
     ASSERT_SYS_OK(pipe(errDsc));
+    set_close_on_exec(outDsc[0], true);
+    set_close_on_exec(outDsc[1], true);
+    set_close_on_exec(errDsc[0], true);
+    set_close_on_exec(errDsc[1], true);
     pid_t pid;
     ASSERT_SYS_OK(pid = fork());
     if (!pid) {
@@ -107,7 +112,7 @@ void* start_task(void* data) {
         ASSERT_SYS_OK(execvp(myTask->argv[0], myTask->argv));
     } else {
         myTask->pid = pid;
-        printf("Task %d started: pid %d.\n", myTask->id, pid);
+        safe_printf("Task %d started: pid %d.\n", myTask->id, pid);
         ASSERT_SYS_OK(close(outDsc[1]));
         ASSERT_SYS_OK(close(errDsc[1]));
 
@@ -132,7 +137,7 @@ void* start_task(void* data) {
         if (isHandling) {
             push_queue(msg);
         } else {
-            printf(msg);
+            safe_printf(msg);
         }
         ASSERT_ZERO(pthread_mutex_unlock(&mutex));
         free_split_string(myTask->argv - 1);
@@ -162,12 +167,12 @@ int main(void) {
             if (!strcmp(args[0], "out")) {
                 int taskNum = atoi(args[1]);
                 ASSERT_ZERO(pthread_mutex_lock(&tasks[taskNum].outMtx));
-                printf("Task %d stdout: '%s'.\n", taskNum, tasks[taskNum].out);
+                safe_printf("Task %d stdout: '%s'.\n", taskNum, tasks[taskNum].out);
                 ASSERT_ZERO(pthread_mutex_unlock(&tasks[taskNum].outMtx));
             } else if (!strcmp(args[0], "err")) {
                 int taskNum = atoi(args[1]);
                 pthread_mutex_lock(&tasks[taskNum].errMtx);
-                printf("Task %d stderr: '%s'.\n", taskNum, tasks[taskNum].err);
+                safe_printf("Task %d stderr: '%s'.\n", taskNum, tasks[taskNum].err);
                 pthread_mutex_unlock(&tasks[taskNum].errMtx);
             } else if (!strcmp(args[0], "kill")) {
                 int taskNum = atoi(args[1]);

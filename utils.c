@@ -88,7 +88,9 @@ bool read_line(char* buffer, size_t size_of_buffer, FILE* file)
     memcpy(buffer, line, len + 1);
 
     // printf_string(buffer);
-    buffer[strlen(buffer) - 1] = '\0';
+    if (buffer[strlen(buffer) - 1] == '\n') {
+        buffer[strlen(buffer) - 1] = '\0';
+    }
 
     free(line);
 
