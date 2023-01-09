@@ -13,8 +13,6 @@ endfunction()
 
 add_library(err err.c)
 add_library(utils utils.c)
-add_library(safe_printf safe_printf.c)
 add_example_program(executor)
 target_link_libraries(executor utils)
 target_link_libraries(executor err)
-target_link_libraries(executor safe_printf)

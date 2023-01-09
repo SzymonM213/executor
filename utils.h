@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <pthread.h>
+#include <stdarg.h>
 
 /*
  * Set or unset the 'close_on_exec' flag on a given descriptor.
@@ -32,7 +34,8 @@ void free_split_string(char** parts);
  * Read a line from `file`.
  *
  * Read characters into buffer until a newline or EOF is encountered.
- * If we read anything (possibly just a newline), set buffer to a non-empty null-terminated string and return true.
+ * If we read anything (possibly just a newline), set buffer to a non-empty 
+ * null-terminated string and return true.
  * Otherwise (immediate EOF), set buffer to empty string and return false.
  *
  * The newline is included, if we end at one.
@@ -43,6 +46,9 @@ void free_split_string(char** parts);
  * size_of_buffer must be at least 2.
  */
 bool read_line(char* buffer, size_t size_of_buffer, FILE* file);
+
+
+void safe_printf(char *s, ...);
 
 #endif
 

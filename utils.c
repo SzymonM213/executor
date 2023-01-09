@@ -13,8 +13,23 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <stdarg.h>
 
 #include "err.h"
+
+static pthread_mutex_t printfMtx = PTHREAD_MUTEX_INITIALIZER;
+
+void safe_printf(char *s, ...)
+{
+    va_list ap;
+    va_start(ap, s);
+    pthread_mutex_lock(&printfMtx);
+    vfprintf(stdout, s, ap);
+    fflush(stdout);
+    pthread_mutex_unlock(&printfMtx);
+    va_end(ap);
+}
 
 void set_close_on_exec(int file_descriptor, bool value)
 {
